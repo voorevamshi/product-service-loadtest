@@ -1,0 +1,96 @@
+server:
+  port: 8080
+  # ─── Tomcat thread pool tuned for t3.micro (1 GB RAM, 2 vCPU) ───────────────
+  # t3.micro safe capacity ≈ 150 QPS with these settings.
+  # Push beyond 200 QPS → threads exhaust → HTTP 503 / request queuing / OOM.
+  tomcat:
+    threads:
+      max: 50          # Default is 200 — too high for 1 GB RAM; each thread ~1 MB stack
+      min-spare: 10
+    accept-count: 100  # Queue depth before rejecting; beyond this → connection refused
+    connection-timeout: 5000  # ms — clients waiting > 5 s get reset (prevents thread hang)
+    max-connections: 800
+  # Compression saves bandwidth (important on micro)
+  compression:
+    enabled: true
+    mime-types: application/json,text/plain
+    min-response-size: 1024
+
+spring:
+  application:
+    name: product-service
+
+  # ─── Datasource (H2 in-memory for demo; swap to RDS in real deployment) ─────
+  datasource:
+    url: jdbc:h2:mem:productdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+    # HikariCP connection pool — deliberately small for t3.micro
+    hikari:
+      maximum-pool-size: 10    # Beyond this DB calls queue → latency spikes at high QPS
+      minimum-idle: 3
+      connection-timeout: 3000  # ms before giving up on getting a connection
+      idle-timeout: 30000
+      max-lifetime: 60000
+
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+        jdbc:
+          batch_size: 20   # Batching reduces DB round-trips
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  # ─── Cache (Caffeine in-process cache) ───────────────────────────────────────
+  cache:
+    type: caffeine
+    caffeine:
+      spec: maximumSize=500,expireAfterWrite=60s
+
+# ─── Actuator endpoints ────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,threaddump,heapdump,env
+  endpoint:
+    health:
+      show-details: always
+    heapdump:
+      enabled: true   # Hit /actuator/heapdump during overload to capture OOM evidence
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+# ─── Resilience4j Rate Limiter ────────────────────────────────────────────────
+# Hard cap at 150 req/s — excess gets HTTP 429 instead of crashing the JVM
+resilience4j:
+  ratelimiter:
+    instances:
+      productApi:
+        limit-for-period: 150          # Max requests per refresh period
+        limit-refresh-period: 1s
+        timeout-duration: 0            # Fail-fast; no waiting
+        register-health-indicator: true
+
+# ─── JVM memory hint (set in startup script, documented here for reference) ───
+# java -Xms256m -Xmx700m -XX:+UseG1GC -XX:MaxGCPauseMillis=200
+# -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heap-dump.hprof
+# -jar product-service.jar
+
+logging:
+  level:
+    com.demo.productservice: INFO
+    org.springframework.web: WARN
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

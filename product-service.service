@@ -1,0 +1,40 @@
+[Unit]
+Description=Product Service Spring Boot Application
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+
+WorkingDirectory=/opt/product-service
+
+# JVM tuned for t3.micro — see start.sh for explanation of each flag
+ExecStart=/usr/bin/java \
+  -Xms256m \
+  -Xmx700m \
+  -XX:+UseG1GC \
+  -XX:MaxGCPauseMillis=200 \
+  -XX:+HeapDumpOnOutOfMemoryError \
+  -XX:HeapDumpPath=/tmp/heap-dumps/heap-dump.hprof \
+  -XX:+ExitOnOutOfMemoryError \
+  -Xss512k \
+  -XX:MaxMetaspaceSize=128m \
+  -Xlog:gc*:file=/var/log/product-service/gc.log:time,uptime:filecount=5,filesize=10m \
+  -jar /opt/product-service/product-service-1.0.0.jar \
+  --spring.profiles.active=prod
+
+# Restart automatically — critical when OOM kills the process
+Restart=on-failure
+RestartSec=10
+
+# Resource limits — prevent OOM from killing the whole EC2 instance
+LimitNOFILE=65536
+LimitNPROC=4096
+
+StandardOutput=append:/var/log/product-service/app.log
+StandardError=append:/var/log/product-service/app-error.log
+
+[Install]
+WantedBy=multi-user.target
