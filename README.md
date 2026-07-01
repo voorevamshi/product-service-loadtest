@@ -28,6 +28,7 @@ product-service/
 ```
 
 - [Product Service Load Testing with k6](docs/loadTestingWithK6.md)
+- [dropped iterations](docs/dropped_iterations.md)
 - [Why Caffeine Breaks with Autoscaling](docs/whyCaffeineBreaksWithAutoscaling.md)
 - [The Fix — Redis as Distributed Cache](docs/TheFix_RedisasDistributedCache.md)
 ---
