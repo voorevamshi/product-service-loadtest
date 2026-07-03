@@ -77,7 +77,7 @@ ERRO[0150] thresholds on metrics 'error_rate' have been crossed
 
 ## Performance Test Comparison: Run 1 vs Run 2
 
-| Metric | Run 1 | Run 2 | Change | Insight |
+| Metric | Run 1(local) | Run 2 (Ec2) | Change | Insight |
 |---|---:|---:|---:|---|
 | **Total Requests** | **21,168** | **21,899** | ✅ **+731** | More requests were generated and processed during the test. |
 | **Error Rate** | **20.76%** | **23.28%** | ❌ **+2.52%** | Rate limiting became more aggressive, resulting in a higher error rate. |
