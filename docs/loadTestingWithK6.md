@@ -731,18 +731,7 @@ vmstat 1
 The overload test on t3.micro showed excellent response times (p95: 38ms, p99: 197ms) 
 but exceeded the 5% error threshold at 20.76% when QPS hit 200, confirming our 
 sustainable capacity limit is ~150 QPS with rate limiter protection working effectively.
-
-## Option 2: Action-Oriented
-
-Load testing confirmed our t3.micro can handle 150 QPS reliably, but at 200+ QPS 
-the error rate spikes to 20.76% due to rate limiting. Recommendation: either scale 
-to t3.small for 200+ QPS or optimize JVM/Xmx to 512m to improve capacity by ~20%.
-
-## Option 3: Business-Focused
-
-Performance testing validated the t3.micro instance handles 150 QPS with <1% errors 
-and sub-40ms response times. The 20.76% error rate at 200 QPS indicates we need either 
-auto-scaling above 150 QPS or an upgrade to t3.small for peak traffic handling.
+[Performance Test Comparison: Run 1 vs Run 2](run1_Vs_run2.md)
 
 **Quick Pick:** Option 1 is best for technical teams, Option 2 for DevOps/Architects, Option 3 for Management/Stakeholders.
 
