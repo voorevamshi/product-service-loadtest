@@ -1,16 +1,12 @@
 server:
   port: 8080
-  # ─── Tomcat thread pool tuned for t3.micro (1 GB RAM, 2 vCPU) ───────────────
-  # t3.micro safe capacity ≈ 150 QPS with these settings.
-  # Push beyond 200 QPS → threads exhaust → HTTP 503 / request queuing / OOM.
   tomcat:
     threads:
-      max: 50          # Default is 200 — too high for 1 GB RAM; each thread ~1 MB stack
+      max: 50
       min-spare: 10
-    accept-count: 100  # Queue depth before rejecting; beyond this → connection refused
-    connection-timeout: 5000  # ms — clients waiting > 5 s get reset (prevents thread hang)
+    accept-count: 100
+    connection-timeout: 5000
     max-connections: 800
-  # Compression saves bandwidth (important on micro)
   compression:
     enabled: true
     mime-types: application/json,text/plain
@@ -20,17 +16,15 @@ spring:
   application:
     name: product-service
 
-  # ─── Datasource (H2 in-memory for demo; swap to RDS in real deployment) ─────
   datasource:
     url: jdbc:h2:mem:productdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
     driver-class-name: org.h2.Driver
     username: sa
     password:
-    # HikariCP connection pool — deliberately small for t3.micro
     hikari:
-      maximum-pool-size: 10    # Beyond this DB calls queue → latency spikes at high QPS
+      maximum-pool-size: 10
       minimum-idle: 3
-      connection-timeout: 3000  # ms before giving up on getting a connection
+      connection-timeout: 3000
       idle-timeout: 30000
       max-lifetime: 60000
 
@@ -43,20 +37,19 @@ spring:
       hibernate:
         format_sql: false
         jdbc:
-          batch_size: 20   # Batching reduces DB round-trips
+          batch_size: 20
 
   h2:
     console:
       enabled: true
       path: /h2-console
 
-  # ─── Cache (Caffeine in-process cache) ───────────────────────────────────────
+  # ── Cache: Caffeine (local dev — no Redis needed) ──────────────────────────
   cache:
     type: caffeine
     caffeine:
       spec: maximumSize=500,expireAfterWrite=60s
 
-# ─── Actuator endpoints ────────────────────────────────────────────────────────
 management:
   endpoints:
     web:
@@ -66,31 +59,42 @@ management:
     health:
       show-details: always
     heapdump:
-      enabled: true   # Hit /actuator/heapdump during overload to capture OOM evidence
+      enabled: true
   metrics:
     export:
       prometheus:
         enabled: true
 
-# ─── Resilience4j Rate Limiter ────────────────────────────────────────────────
-# Hard cap at 150 req/s — excess gets HTTP 429 instead of crashing the JVM
 resilience4j:
   ratelimiter:
     instances:
       productApi:
-        limit-for-period: 150          # Max requests per refresh period
+        limit-for-period: 150
         limit-refresh-period: 1s
-        timeout-duration: 0            # Fail-fast; no waiting
+        timeout-duration: 0
         register-health-indicator: true
-
-# ─── JVM memory hint (set in startup script, documented here for reference) ───
-# java -Xms256m -Xmx700m -XX:+UseG1GC -XX:MaxGCPauseMillis=200
-# -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heap-dump.hprof
-# -jar product-service.jar
 
 logging:
   level:
+    # Your app — INFO shows [CACHE MISS], [DB], [429], [RES] slow/error lines
+    # Switch to DEBUG to also see [REQ] every request and [CACHE] evictions
     com.demo.productservice: INFO
+
+    # See Spring's cache proxy decisions (CACHE HIT / CACHE MISS at framework level)
+    org.springframework.cache: WARN  # switch to DEBUG during cache debugging
+
+    # Hibernate SQL — switch to DEBUG to see every query during load test
+    org.hibernate.SQL: WARN
+    org.hibernate.orm.jdbc.bind: WARN
+
+    # Resilience4j internal — switch to DEBUG to trace permit decisions
+    io.github.resilience4j: WARN
+
+    # Suppress noisy Spring web logs
     org.springframework.web: WARN
+
+  # Pattern includes thread name — during load test you'll see
+  # http-nio-8080-exec-1 through exec-50 (your 50 Tomcat threads)
+  # If you see exec-1 through exec-50 ALL active at once → thread pool at limit
   pattern:
-    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %-40logger{40} - %msg%n"

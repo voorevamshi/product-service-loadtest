@@ -1,0 +1,71 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# PRODUCTION PROFILE  —  activate with: --spring.profiles.active=prod
+# Used on EC2 / ECS / EKS behind an ALB with autoscaling
+# ══════════════════════════════════════════════════════════════════════════════
+
+spring:
+
+  # ── Datasource: point at RDS (set via env vars, never hardcode credentials) ─
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/productdb}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 3
+      connection-timeout: 3000
+      idle-timeout: 30000
+      max-lifetime: 60000
+
+  jpa:
+    database-platform: org.hibernate.dialect.MySQLDialect
+    hibernate:
+      ddl-auto: validate          # NEVER create-drop in prod — use Flyway/Liquibase
+    show-sql: false
+
+  # ── Redis: distributed cache shared across ALL autoscaling instances ─────────
+  #
+  # Why Redis fixes Caffeine's autoscaling problem:
+  #   Caffeine = per-JVM heap cache → Instance A and Instance B have DIFFERENT caches
+  #             → a CacheEvict on A does NOT evict on B → stale data on B
+  #
+  #   Redis    = ONE shared cache outside the JVM → evict on any instance
+  #             → ALL instances immediately see the updated value ✅
+  #
+  # AWS setup:
+  #   1. Create ElastiCache Redis cluster (same VPC as your EC2/ECS)
+  #   2. Set REDIS_HOST env var to the ElastiCache primary endpoint
+  #   3. Open port 6379 in your EC2 security group to ElastiCache SG
+  #
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}      # leave blank if no auth (not recommended in prod)
+      timeout: 2000ms                   # fail fast if Redis is unreachable
+      lettuce:
+        pool:
+          max-active: 20                # max connections per instance
+          max-idle: 10
+          min-idle: 2
+          max-wait: 1000ms
+
+  # ── Override cache type to Redis for prod ────────────────────────────────────
+  cache:
+    type: redis
+    redis:
+      time-to-live: 60000              # ms (60s default, per-cache overrides in CacheConfig)
+      cache-null-values: false
+
+  h2:
+    console:
+      enabled: false                   # disable H2 console in prod
+
+logging:
+  level:
+    com.demo.productservice: INFO
+    org.springframework.cache: DEBUG   # set to INFO after verifying Redis hits/misses
+    io.lettuce: WARN
+  file:
+    name: /var/log/product-service/app.log
